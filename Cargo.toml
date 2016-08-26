@@ -1,0 +1,6 @@
+[package]
+name = "dhcp4r"
+version = "0.1.0"
+authors = ["Richard Warburton <richard@warburton.it>"]
+
+[dependencies]
