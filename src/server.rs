@@ -14,11 +14,14 @@ pub struct Server {
 }
 
 pub trait Handler {
-    fn handle_request(&Server, u8, Packet);
+    fn handle_request(&mut self, &Server, u8, Packet);
 }
 
 impl Server {
-    pub fn serve<H: Handler>(udp_soc: UdpSocket, server_ip: [u8; 4], handler: H) -> std::io::Error {
+    pub fn serve<H: Handler>(udp_soc: UdpSocket,
+                             server_ip: [u8; 4],
+                             mut handler: H)
+                             -> std::io::Error {
         let mut in_buf: [u8; 1500] = [0; 1500];
         let mut s = Server {
             out_buf: Cell::new([0; 1500]),

@@ -1,7 +1,7 @@
 #[macro_use(u32_bytes, bytes_u32)]
 extern crate dhcp4r;
 
-use std::net::{UdpSocket, SocketAddr, Ipv4Addr, IpAddr};
+use std::net::UdpSocket;
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use std::ops::Add;
@@ -25,7 +25,7 @@ fn main() {
     let socket = UdpSocket::bind("0.0.0.0:67").unwrap();
     socket.set_broadcast(true).unwrap();
 
-    let mut ms = my_server {
+    let ms = MyServer {
         leases: HashMap::new(),
         last_lease: 0,
         lease_duration: Duration::new(LEASE_DURATION_SECS as u64, 0),
@@ -34,13 +34,13 @@ fn main() {
     server::Server::serve(socket, SERVER_IP, ms);
 }
 
-struct my_server {
+struct MyServer {
     leases: HashMap<u32, ([u8; 6], Instant)>,
     last_lease: u32,
     lease_duration: Duration,
 }
 
-impl server::Handler for my_server {
+impl server::Handler for MyServer {
     // fn handle_request(&Server, u8, Packet);
     fn handle_request(&mut self,
                       server: &server::Server,
@@ -89,12 +89,13 @@ impl server::Handler for my_server {
                 }
             }
 
+            // TODO - not necessary but support for dhcp4r::INFORM might be nice
             _ => {}
         }
     }
 }
 
-impl my_server {
+impl MyServer {
     fn available(&self, chaddr: &[u8; 6], pos: u32) -> bool {
         return pos >= IP_START_NUM && pos < IP_START_NUM + LEASE_NUM &&
                match self.leases.get(&pos) {
@@ -105,33 +106,33 @@ impl my_server {
 }
 
 fn reply(s: &server::Server, msg_type: u8, req_packet: packet::Packet, offer_ip: [u8; 4]) {
-    s.reply(msg_type,
-            vec![options::Option {
-                     code: options::IP_ADDRESS_LEASE_TIME,
-                     data: &LEASE_DURATION_BYTES,
-                 },
-                 options::Option {
-                     code: options::SUBNET_MASK,
-                     data: &SUBNET_MASK,
-                 },
-                 options::Option {
-                     code: options::ROUTER,
-                     data: &ROUTER_IP,
-                 },
-                 options::Option {
-                     code: options::DOMAIN_NAME_SERVER,
-                     data: &DNS_IPS,
-                 }],
-            offer_ip,
-            req_packet);
+    let _ = s.reply(msg_type,
+                    vec![options::Option {
+                             code: options::IP_ADDRESS_LEASE_TIME,
+                             data: &LEASE_DURATION_BYTES,
+                         },
+                         options::Option {
+                             code: options::SUBNET_MASK,
+                             data: &SUBNET_MASK,
+                         },
+                         options::Option {
+                             code: options::ROUTER,
+                             data: &ROUTER_IP,
+                         },
+                         options::Option {
+                             code: options::DOMAIN_NAME_SERVER,
+                             data: &DNS_IPS,
+                         }],
+                    offer_ip,
+                    req_packet);
 }
 
 fn nak(s: &server::Server, req_packet: packet::Packet, message: &[u8]) {
-    s.reply(dhcp4r::NAK,
-            vec![options::Option {
-                     code: options::MESSAGE,
-                     data: message,
-                 }],
-            [0, 0, 0, 0],
-            req_packet);
+    let _ = s.reply(dhcp4r::NAK,
+                    vec![options::Option {
+                             code: options::MESSAGE,
+                             data: message,
+                         }],
+                    [0, 0, 0, 0],
+                    req_packet);
 }
