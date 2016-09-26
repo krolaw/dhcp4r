@@ -35,7 +35,7 @@ impl Server {
                 Ok((l, src)) => {
                     if let Ok(p) = decode(&in_buf[..l]) {
                         if let Some(msg_type) = p.option(options::DHCP_MESSAGE_TYPE) {
-                            if msg_type.len() != 1 || !s.for_this_server(&p) {
+                            if msg_type.len() != 1 {
                                 continue;
                             }
                             s.src = src;
@@ -83,14 +83,14 @@ impl Server {
         })
     }
 
-    fn for_this_server(&self, packet: &Packet) -> bool {
+    pub fn for_this_server(&self, packet: &Packet) -> bool {
         match packet.option(options::SERVER_IDENTIFIER) {
             None => false,
             Some(x) => (x == &self.server_ip),
         }
     }
 
-    fn send(&self, p: Packet) -> std::io::Result<usize> {
+    pub fn send(&self, p: Packet) -> std::io::Result<usize> {
         let mut addr = self.src;
         if p.broadcast || addr.ip() == IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)) {
             addr.set_ip(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)));

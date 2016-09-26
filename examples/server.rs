@@ -12,7 +12,7 @@ use dhcp4r::{packet, options, server};
 const SERVER_IP: [u8; 4] = [192, 168, 0, 76];
 const IP_START: [u8; 4] = [192, 168, 0, 180];
 const SUBNET_MASK: [u8; 4] = [255, 255, 255, 0];
-const DNS_IPS: [u8; 4] = [192, 168, 0, 254]; //[8, 8, 8, 8,8, 8, 4, 4]; // google dns servers
+const DNS_IPS: [u8; 8] = [8, 8, 8, 8, 8, 8, 4, 4]; // google dns servers
 const ROUTER_IP: [u8; 4] = [192, 168, 0, 254];
 const LEASE_DURATION_SECS: u32 = 7200;
 const LEASE_NUM: u32 = 100;
@@ -62,6 +62,9 @@ impl server::Handler for MyServer {
             }
 
             dhcp4r::REQUEST => {
+                if !server.for_this_server(&in_packet) {
+                    return;
+                }
                 let req_ip = match in_packet.option(options::REQUESTED_IP_ADDRESS) {
                     None => in_packet.ciaddr,
                     Some(x) => {
@@ -83,6 +86,9 @@ impl server::Handler for MyServer {
             }
             // Not technically necessary
             dhcp4r::RELEASE => {
+                if !server.for_this_server(&in_packet) {
+                    return;
+                }
                 let ip_num = bytes_u32!(in_packet.ciaddr);
                 if self.available(&in_packet.chaddr, ip_num) {
                     self.leases.remove(&ip_num);
