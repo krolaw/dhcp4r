@@ -2,7 +2,7 @@ pub mod options;
 pub mod packet;
 pub mod server;
 
-
+/// Converts a u32 to 4 bytes (Big endian)
 #[macro_export]
 macro_rules! u32_bytes {
     ( $x:expr ) => {
@@ -10,6 +10,7 @@ macro_rules! u32_bytes {
     };
 }
 
+/// Converts 4 bytes to a u32 (Big endian)
 #[macro_export]
 macro_rules! bytes_u32 {
     ( $x:expr ) => {

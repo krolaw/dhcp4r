@@ -41,15 +41,26 @@ struct MyServer {
 }
 
 impl server::Handler for MyServer {
-    // fn handle_request(&Server, u8, Packet);
     fn handle_request(&mut self,
                       server: &server::Server,
                       msg_type: u8,
                       in_packet: packet::Packet) {
         match msg_type {
             dhcp4r::DISCOVER => {
+                // Prefer client's choice if available
+                if let Some(r) = in_packet.option(options::REQUESTED_IP_ADDRESS) {
+                    if r.len() == 4 && self.available(&in_packet.chaddr, bytes_u32!(r)) {
+                        reply(server, dhcp4r::OFFER, in_packet, [r[0], r[1], r[2], r[3]]);
+                        return;
+                    }
+                }
+                // Otherwise prefer existing (including expired if available)
+                if let Some(ip) = self.current_lease(&in_packet.chaddr) {
+                    reply(server, dhcp4r::OFFER, in_packet, u32_bytes!(ip));
+                    return;
+                }
+                // Otherwise choose a free ip if available
                 for _ in 0..LEASE_NUM {
-                    // TODO prefer REQUESTED_IP_ADDRESS
                     self.last_lease = (self.last_lease + 1) % LEASE_NUM;
                     if self.available(&in_packet.chaddr, IP_START_NUM + &self.last_lease) {
                         reply(server,
@@ -62,6 +73,7 @@ impl server::Handler for MyServer {
             }
 
             dhcp4r::REQUEST => {
+                // Ignore requests to alternative DHCP server
                 if !server.for_this_server(&in_packet) {
                     return;
                 }
@@ -84,14 +96,14 @@ impl server::Handler for MyServer {
                                    (in_packet.chaddr, Instant::now().add(self.lease_duration)));
                 reply(server, dhcp4r::ACK, in_packet, req_ip);
             }
-            // Not technically necessary
-            dhcp4r::RELEASE => {
+
+            dhcp4r::RELEASE | dhcp4r::DECLINE => {
+                // Ignore requests to alternative DHCP server
                 if !server.for_this_server(&in_packet) {
                     return;
                 }
-                let ip_num = bytes_u32!(in_packet.ciaddr);
-                if self.available(&in_packet.chaddr, ip_num) {
-                    self.leases.remove(&ip_num);
+                if let Some(ip) = self.current_lease(&in_packet.chaddr) {
+                    self.leases.remove(&ip);
                 }
             }
 
@@ -108,6 +120,15 @@ impl MyServer {
             Some(x) => x.0 == *chaddr && Instant::now().gt(&x.1),
             None => true,
         };
+    }
+
+    fn current_lease(&self, chaddr: &[u8; 6]) -> Option<u32> {
+        for (i, v) in &self.leases {
+            if &v.0 == chaddr {
+                return Some(*i);
+            }
+        }
+        return None;
     }
 }
 

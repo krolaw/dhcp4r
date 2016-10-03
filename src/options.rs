@@ -6,6 +6,7 @@ pub struct Option<'a> {
 }
 
 impl<'a> Option<'a> {
+    /// Returns name of DHCP Option code
     pub fn title(&'a self) -> String {
         match title(self.code) {
             Some(t) => t.to_string(),
@@ -114,6 +115,7 @@ pub const TZ_DATABASE_STRING: u8 = 101;
 
 pub const CLASSLESS_ROUTE_FORMAT: u8 = 121;
 
+/// Returns title of DHCP Option code, if known.
 pub fn title(code: u8) -> std::option::Option<&'static str> {
     Some(match code {
         SUBNET_MASK => "Subnet Mask",

@@ -1,39 +1,17 @@
-#[macro_use(u32_bytes, bytes_u32)]
 extern crate dhcp4r;
 extern crate time;
 
 use std::net::{UdpSocket,Ipv4Addr};
-use std::time::{Duration, Instant};
-use std::collections::HashMap;
-use std::ops::Add;
-
 use dhcp4r::{packet, options, server};
 
 fn main() {
-    let socket = UdpSocket::bind("0.0.0.0:67").unwrap();
-    socket.set_broadcast(true).unwrap();
-
-    let ms = MyServer {
-        //leases: HashMap::new(),
-        //last_lease: 0,
-        //lease_duration: Duration::new(LEASE_DURATION_SECS as u64, 0),
-    };
-
-    server::Server::serve(socket, [0,0,0,0], ms);
+    server::Server::serve(UdpSocket::bind("0.0.0.0:67").unwrap(), [0,0,0,0], MyServer{});
 }
 
-struct MyServer {
-    //leases: HashMap<u32, ([u8; 6], Instant)>,
-    //last_lease: u32,
-    //lease_duration: Duration,
-}
+struct MyServer {}
 
 impl server::Handler for MyServer {
-    // fn handle_request(&Server, u8, Packet);
-    fn handle_request(&mut self,
-                      server: &server::Server,
-                      msg_type: u8,
-                      in_packet: packet::Packet) {
+    fn handle_request(&mut self, _: &server::Server, msg_type: u8, in_packet: packet::Packet) {
         match msg_type {
             dhcp4r::REQUEST => {
                 let req_ip = match in_packet.option(options::REQUESTED_IP_ADDRESS) {
@@ -46,7 +24,6 @@ impl server::Handler for MyServer {
                         }
                     }
                 };
-
                 println!("{}\t{}\t{}\tOnline", time::now().strftime("%Y-%m-%dT%H:%M:%S").unwrap(),
                  chaddr(&in_packet.chaddr), Ipv4Addr::from(req_ip));
             }
@@ -55,8 +32,8 @@ impl server::Handler for MyServer {
     }
 }
 
+/// Formats byte array machine address into hex pairs separated by colons.
+/// Array must be at least one byte long.
 fn chaddr(a: &[u8]) -> String {
-    let mut z = a.iter().fold(String::new(), |acc, &b| format!("{}{:02x}:", acc, &b));
-    z.truncate(17);
-    z
+    a[1..].iter().fold(format!("{:02x}",a[0]), |acc, &b| format!("{}:{:02x}", acc, &b))
 }

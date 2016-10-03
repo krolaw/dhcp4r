@@ -2,6 +2,7 @@ use std;
 
 use options::*;
 
+/// DHCP Packet Structure
 pub struct Packet<'a> {
     pub reply: bool, // false = request, true = reply
     pub hops: u8,
@@ -16,6 +17,7 @@ pub struct Packet<'a> {
     pub options: Vec<Option<'a>>,
 }
 
+/// Parses Packet from byte array
 pub fn decode(p: &[u8]) -> Result<Packet, &'static str> {
     if p[236..240] != COOKIE {
         return Err("Invalid Cookie");
@@ -66,6 +68,7 @@ pub fn decode(p: &[u8]) -> Result<Packet, &'static str> {
 }
 
 impl<'a> Packet<'a> {
+    /// Extracts requested option payload from packet if available
     pub fn option(&self, code: u8) -> std::option::Option<&'a [u8]> {
         for option in &self.options {
             if option.code == code {
@@ -75,6 +78,7 @@ impl<'a> Packet<'a> {
         None
     }
 
+    /// Convenience function for extracting a packet's message type.
     pub fn message_type(&self) -> u8 {
         if let Some(x) = self.option(DHCP_MESSAGE_TYPE) {
             if x.len() > 0 {
@@ -84,6 +88,7 @@ impl<'a> Packet<'a> {
         0
     }
 
+    /// Creates byte array DHCP packet
     pub fn encode<'c>(&'c self, p: &'c mut [u8]) -> &[u8] {
         p[..12].clone_from_slice(&[(if self.reply {
                                        BOOT_REPLY

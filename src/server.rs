@@ -6,6 +6,8 @@ use packet::*;
 use options;
 use NAK;
 
+///! This is a convenience module that simplifies the writing of a DHCP server service.
+
 pub struct Server {
     out_buf: Cell<[u8; 1500]>,
     socket: UdpSocket,
@@ -15,6 +17,32 @@ pub struct Server {
 
 pub trait Handler {
     fn handle_request(&mut self, &Server, u8, Packet);
+}
+
+/// Orders and filters options based on PARAMETER_REQUEST_LIST received from client.
+/// DHCP_MESSAGE_TYPE and SERVER_IDENTIFIER are always first and always retained.
+/// This function is called by Reply.
+pub fn filter_options_by_req(opts: &mut Vec<options::Option>, req_params: &[u8]) {
+    let mut pos = 0;
+    let h = &[options::DHCP_MESSAGE_TYPE as u8, options::SERVER_IDENTIFIER as u8] as &[u8];
+    for z in [h, req_params].iter() {
+        for r in z.iter() {
+            let mut found = false;
+            let mut at = 0;
+            for (i, o) in opts[pos..].iter().enumerate() {
+                if o.code == *r {
+                    found = true;
+                    at = i + pos;
+                    break;
+                }
+            }
+            if found {
+                opts.swap(pos, at);
+                pos = pos + 1;
+            }
+        }
+    }
+    opts.truncate(pos);
 }
 
 impl Server {
@@ -47,6 +75,9 @@ impl Server {
         }
     }
 
+    /// Constructs and sends a reply packet back to the client.
+    /// additional_options should not include DHCP_MESSAGE_TYPE nor SERVER_IDENTIFIER as these
+    /// are added automatically.
     pub fn reply(&self,
                  msg_type: u8,
                  additional_options: Vec<options::Option>,
@@ -54,6 +85,7 @@ impl Server {
                  req_packet: Packet)
                  -> std::io::Result<usize> {
         let mt = &[msg_type];
+
         let mut opts: Vec<options::Option> = Vec::with_capacity(additional_options.len() + 2);
         opts.push(options::Option {
             code: options::DHCP_MESSAGE_TYPE,
@@ -64,6 +96,11 @@ impl Server {
             data: &self.server_ip,
         });
         opts.extend(additional_options);
+
+        if let Some(prl) = req_packet.option(options::PARAMETER_REQUEST_LIST) {
+            filter_options_by_req(&mut opts, &prl);
+        }
+
         self.send(Packet {
             reply: true,
             hops: 0,
@@ -83,6 +120,7 @@ impl Server {
         })
     }
 
+    /// Checks the packet see if it was intended for this DHCP server (as opposed to some other also on the network).
     pub fn for_this_server(&self, packet: &Packet) -> bool {
         match packet.option(options::SERVER_IDENTIFIER) {
             None => false,
@@ -90,6 +128,7 @@ impl Server {
         }
     }
 
+    /// Encodes and sends a DHCP packet back to the client.
     pub fn send(&self, p: Packet) -> std::io::Result<usize> {
         let mut addr = self.src;
         if p.broadcast || addr.ip() == IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)) {
