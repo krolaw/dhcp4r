@@ -117,7 +117,7 @@ impl MyServer {
     fn available(&self, chaddr: &[u8; 6], pos: u32) -> bool {
         return pos >= IP_START_NUM && pos < IP_START_NUM + LEASE_NUM &&
                match self.leases.get(&pos) {
-            Some(x) => x.0 == *chaddr && Instant::now().gt(&x.1),
+            Some(x) => x.0 == *chaddr && x.1.gt(&Instant::now()),
             None => true,
         };
     }
