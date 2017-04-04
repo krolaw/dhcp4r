@@ -1,6 +1,13 @@
-use std::net::{UdpSocket, SocketAddr, Ipv4Addr, IpAddr};
 use std;
 use std::cell::Cell;
+use std::ffi::CString;
+use std::net::{UdpSocket, SocketAddr, Ipv4Addr, IpAddr};
+use std::os::unix::io::AsRawFd;
+
+#[cfg(feature = "linux-udp-helper")]
+use libc;
+#[cfg(feature = "linux-udp-helper")]
+use net2::UdpBuilder;
 
 use packet::*;
 use options;
@@ -45,7 +52,64 @@ pub fn filter_options_by_req(opts: &mut Vec<options::Option>, req_params: &[u8])
     opts.truncate(pos);
 }
 
+#[cfg(any(target_os = "linux",
+target_os = "android",
+target_os = "emscripten",
+target_os = "fuchsia"))]
+fn bind_to_device_flag() -> libc::c_int {
+    libc::SO_BINDTODEVICE
+}
+
+#[cfg(any(target_os = "macos",
+target_os = "ios",
+target_os = "freebsd",
+target_os = "dragonfly",
+target_os = "openbsd",
+target_os = "netbsd",
+target_os = "bitrig"))]
+fn bind_to_device_flag() -> libc::c_int {
+    // TODO(farcaller): libc::IP_RECVIF should work, but it requires interface index?
+    unimplemented!();
+}
+
 impl Server {
+    #[cfg(feature = "linux-udp-helper")]
+    pub fn bind_and_serve<H: Handler, S: Into<String>>(bind_device: Option<S>,
+                                                       server_ip: [u8; 4],
+                                                       handler: H)
+                                                       -> std::io::Error {
+        let socket = UdpBuilder::new_v4();
+        if let Err(e) = socket {
+            return e;
+        }
+        let socket = socket.unwrap();
+        if let Some(bind_device_name) = bind_device {
+            let socket_fd = socket.as_raw_fd();
+            let iface_name_bytes = bind_device_name.into().into_bytes();
+            let iface_name_len = iface_name_bytes.len();
+            let iface = CString::new(iface_name_bytes).unwrap();
+            unsafe {
+                let ret = libc::setsockopt(socket_fd,
+                                           libc::SOL_SOCKET,
+                                           bind_to_device_flag(),
+                                           iface.as_ptr() as *const libc::c_void,
+                                           iface_name_len as u32);
+                if ret == -1 {
+                    return std::io::Error::last_os_error();
+                }
+            };
+        }
+
+        let socket = socket.bind("0.0.0.0:67");
+        if let Err(e) = socket {
+            return e;
+        }
+        let socket = socket.unwrap();
+        socket.set_broadcast(true).unwrap();
+
+        Server::serve(socket, server_ip, handler)
+    }
+
     pub fn serve<H: Handler>(udp_soc: UdpSocket,
                              server_ip: [u8; 4],
                              mut handler: H)

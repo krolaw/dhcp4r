@@ -1,3 +1,8 @@
+#[cfg(feature = "linux-udp-helper")]
+extern crate net2;
+#[cfg(feature = "linux-udp-helper")]
+extern crate libc;
+
 pub mod options;
 pub mod packet;
 pub mod server;

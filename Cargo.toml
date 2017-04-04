@@ -15,5 +15,11 @@ repository = "https://github.com/krolaw/dhcp4r"
 keywords = ["dhcp", "server", "monitor", "client"]
 license = "BSD-3-Clause"
 
+[features]
+default = ["linux-udp-helper"]
+linux-udp-helper = ["net2", "libc"]
+
 [dependencies]
 time = "0.1"
+net2 = { version = "^0.2", optional = true }
+libc = { version = "^0.2", optional = true }
