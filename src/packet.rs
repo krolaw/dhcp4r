@@ -129,7 +129,7 @@ impl<'a> Packet<'a> {
         length += 1;
         if length < 272 {
             // Pad to min size
-            p[length..272].clone_from_slice(&[PAD; 32][..length - 240]);
+            p[length..272].clone_from_slice(&[PAD; 32][..272 - length]);
             length = 272
         }
         &p[..length]
