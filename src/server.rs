@@ -24,7 +24,7 @@ pub trait Handler {
 /// This function is called by Reply.
 pub fn filter_options_by_req(opts: &mut Vec<options::Option>, req_params: &[u8]) {
     let mut pos = 0;
-    let h = &[options::DHCP_MESSAGE_TYPE as u8, options::SERVER_IDENTIFIER as u8] as &[u8];
+    let h = &[options::DHCP_MESSAGE_TYPE as u8, options::SERVER_IDENTIFIER as u8, options::IP_ADDRESS_LEASE_TIME as u8] as &[u8];
     for z in [h, req_params].iter() {
         for r in z.iter() {
             let mut found = false;
