@@ -134,19 +134,19 @@ impl MyServer {
 
 fn reply(s: &server::Server, msg_type: u8, req_packet: packet::Packet, offer_ip: [u8; 4]) {
     let _ = s.reply(msg_type,
-                    vec![options::Option {
+                    vec![options::DhcpOption {
                              code: options::IP_ADDRESS_LEASE_TIME,
                              data: &LEASE_DURATION_BYTES,
                          },
-                         options::Option {
+                         options::DhcpOption {
                              code: options::SUBNET_MASK,
                              data: &SUBNET_MASK,
                          },
-                         options::Option {
+                         options::DhcpOption {
                              code: options::ROUTER,
                              data: &ROUTER_IP,
                          },
-                         options::Option {
+                         options::DhcpOption {
                              code: options::DOMAIN_NAME_SERVER,
                              data: &DNS_IPS,
                          }],
@@ -156,7 +156,7 @@ fn reply(s: &server::Server, msg_type: u8, req_packet: packet::Packet, offer_ip:
 
 fn nak(s: &server::Server, req_packet: packet::Packet, message: &[u8]) {
     let _ = s.reply(dhcp4r::NAK,
-                    vec![options::Option {
+                    vec![options::DhcpOption {
                              code: options::MESSAGE,
                              data: message,
                          }],

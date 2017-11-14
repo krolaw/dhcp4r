@@ -14,7 +14,7 @@ pub struct Packet<'a> {
     pub siaddr: [u8; 4],
     pub giaddr: [u8; 4],
     pub chaddr: [u8; 6],
-    pub options: Vec<Option<'a>>,
+    pub options: Vec<DhcpOption<'a>>,
 }
 
 /// Parses Packet from byte array
@@ -41,7 +41,7 @@ pub fn decode(p: &[u8]) -> Result<Packet, &'static str> {
             if i + 2 < l {
                 let opt_end = (p[i + 1]) as usize + i + 2;
                 if opt_end < l {
-                    options.push(Option {
+                    options.push(DhcpOption {
                         code: code,
                         data: &p[i + 2..opt_end],
                     });
@@ -69,7 +69,7 @@ pub fn decode(p: &[u8]) -> Result<Packet, &'static str> {
 
 impl<'a> Packet<'a> {
     /// Extracts requested option payload from packet if available
-    pub fn option(&self, code: u8) -> std::option::Option<&'a [u8]> {
+    pub fn option(&self, code: u8) -> Option<&'a [u8]> {
         for option in &self.options {
             if option.code == code {
                 return Some(&option.data);
