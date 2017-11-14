@@ -2,10 +2,9 @@ use std::net::{UdpSocket, SocketAddr, Ipv4Addr, IpAddr};
 use std;
 use std::cell::Cell;
 
-use options::DhcpOption;
+use options::{DhcpOption, MessageType};
 use packet::*;
 use options;
-use NAK;
 
 ///! This is a convenience module that simplifies the writing of a DHCP server service.
 
@@ -75,12 +74,18 @@ impl Server {
     /// additional_options should not include DHCP_MESSAGE_TYPE nor SERVER_IDENTIFIER as these
     /// are added automatically.
     pub fn reply(&self,
-                 msg_type: u8,
+                 msg_type: MessageType,
                  additional_options: Vec<DhcpOption>,
                  offer_ip: [u8; 4],
                  req_packet: Packet)
                  -> std::io::Result<usize> {
-        let mt = &[msg_type];
+
+        let ciaddr = match msg_type {
+            MessageType::Nak => [0, 0, 0, 0],
+            _ => req_packet.ciaddr,
+        };
+
+        let mt = &[msg_type as u8];
 
         let mut opts: Vec<DhcpOption> = Vec::with_capacity(additional_options.len() + 2);
         opts.push(DhcpOption {
@@ -103,11 +108,7 @@ impl Server {
             xid: req_packet.xid,
             secs: 0,
             broadcast: req_packet.broadcast,
-            ciaddr: if msg_type == NAK {
-                [0, 0, 0, 0]
-            } else {
-                req_packet.ciaddr
-            },
+            ciaddr: ciaddr,
             yiaddr: offer_ip,
             siaddr: [0, 0, 0, 0],
             giaddr: req_packet.giaddr,

@@ -13,7 +13,7 @@ struct MyServer {}
 impl server::Handler for MyServer {
     fn handle_request(&mut self, _: &server::Server, in_packet: packet::Packet) {
         match in_packet.message_type() {
-            dhcp4r::REQUEST => {
+            Ok(options::MessageType::Request) => {
                 let req_ip = match in_packet.option(options::REQUESTED_IP_ADDRESS) {
                     None => in_packet.ciaddr,
                     Some(x) => {

@@ -1,3 +1,5 @@
+use num_traits::FromPrimitive;
+
 pub struct DhcpOption<'a> {
     pub code: u8,
     pub data: &'a [u8],
@@ -220,4 +222,25 @@ pub fn title(code: u8) -> Option<&'static str> {
 
         _ => return None,
     })
+}
+
+///
+/// DHCP Message Type (option code 53)
+///
+#[derive(Primitive)]
+pub enum MessageType {
+    Discover = 1,
+    Offer = 2,
+    Request = 3,
+    Decline = 4,
+    Ack = 5,
+    Nak = 6,
+    Release = 7,
+    Inform = 8,
+}
+
+impl MessageType {
+    pub fn from(val: u8) -> Result<MessageType, String> {
+        MessageType::from_u8(val).ok_or_else(|| format!["Invalid DHCP Message Type: {:?}", val])
+    }
 }

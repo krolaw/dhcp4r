@@ -1,5 +1,3 @@
-use std;
-
 use options::*;
 
 /// DHCP Packet Structure
@@ -79,13 +77,16 @@ impl<'a> Packet<'a> {
     }
 
     /// Convenience function for extracting a packet's message type.
-    pub fn message_type(&self) -> u8 {
+    pub fn message_type(&self) -> Result<MessageType, String> {
         if let Some(x) = self.option(DHCP_MESSAGE_TYPE) {
-            if x.len() > 0 {
-                return x[0];
+            if x.len() != 1 {
+                Err(format!["Invalid length for DHCP MessageType: {}", x.len()])
+            } else {
+                MessageType::from(x[0])
             }
+        } else {
+            Err(format!["Packet does not have MessageType option"])
         }
-        0
     }
 
     /// Creates byte array DHCP packet
