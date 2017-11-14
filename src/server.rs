@@ -17,7 +17,7 @@ pub struct Server {
 }
 
 pub trait Handler {
-    fn handle_request(&mut self, &Server, u8, Packet);
+    fn handle_request(&mut self, &Server, Packet);
 }
 
 /// Orders and filters options based on PARAMETER_REQUEST_LIST received from client.
@@ -63,13 +63,8 @@ impl Server {
                 Err(e) => return e,
                 Ok((l, src)) => {
                     if let Ok(p) = decode(&in_buf[..l]) {
-                        if let Some(msg_type) = p.option(options::DHCP_MESSAGE_TYPE) {
-                            if msg_type.len() != 1 {
-                                continue;
-                            }
-                            s.src = src;
-                            handler.handle_request(&s, msg_type[0], p);
-                        }
+                        s.src = src;
+                        handler.handle_request(&s, p);
                     }
                 }
             }

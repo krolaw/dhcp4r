@@ -43,9 +43,8 @@ struct MyServer {
 impl server::Handler for MyServer {
     fn handle_request(&mut self,
                       server: &server::Server,
-                      msg_type: u8,
                       in_packet: packet::Packet) {
-        match msg_type {
+        match in_packet.message_type() {
             dhcp4r::DISCOVER => {
                 // Prefer client's choice if available
                 if let Some(r) = in_packet.option(options::REQUESTED_IP_ADDRESS) {

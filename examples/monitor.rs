@@ -11,8 +11,8 @@ fn main() {
 struct MyServer {}
 
 impl server::Handler for MyServer {
-    fn handle_request(&mut self, _: &server::Server, msg_type: u8, in_packet: packet::Packet) {
-        match msg_type {
+    fn handle_request(&mut self, _: &server::Server, in_packet: packet::Packet) {
+        match in_packet.message_type() {
             dhcp4r::REQUEST => {
                 let req_ip = match in_packet.option(options::REQUESTED_IP_ADDRESS) {
                     None => in_packet.ciaddr,
