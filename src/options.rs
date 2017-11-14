@@ -225,17 +225,45 @@ pub fn title(code: u8) -> Option<&'static str> {
 }
 
 ///
-/// DHCP Message Type (option code 53)
+/// DHCP Message Type.
+///
+/// # Standards
+///
+/// The semantics of the various DHCP message types are described in RFC 2131 (see Table 2).
+/// Their numeric values are described in Section 9.6 of RFC 2132, which begins:
+///
+/// > This option is used to convey the type of the DHCP message.  The code for this option is 53,
+/// > and its length is 1.
 ///
 #[derive(Primitive)]
 pub enum MessageType {
+    /// Client broadcast to locate available servers.
     Discover = 1,
+
+    /// Server to client in response to DHCPDISCOVER with offer of configuration parameters.
     Offer = 2,
+
+    /// Client message to servers either (a) requesting offered parameters from one server and
+    /// implicitly declining offers from all others, (b) confirming correctness of previously
+    /// allocated address after, e.g., system reboot, or (c) extending the lease on a particular
+    /// network address.
     Request = 3,
+
+    /// Client to server indicating network address is already in use.
     Decline = 4,
+
+    /// Server to client with configuration parameters, including committed network address.
     Ack = 5,
+
+    /// Server to client indicating client's notion of network address is incorrect (e.g., client
+    /// has moved to new subnet) or client's lease as expired.
     Nak = 6,
+
+    /// Client to server relinquishing network address and cancelling remaining lease.
     Release = 7,
+
+    /// Client to server, asking only for local configuration parameters; client already has
+    /// externally configured network address.
     Inform = 8,
 }
 
