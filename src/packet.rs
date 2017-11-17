@@ -1,5 +1,3 @@
-use std;
-
 use options::*;
 
 /// DHCP Packet Structure
@@ -14,7 +12,7 @@ pub struct Packet<'a> {
     pub siaddr: [u8; 4],
     pub giaddr: [u8; 4],
     pub chaddr: [u8; 6],
-    pub options: Vec<Option<'a>>,
+    pub options: Vec<DhcpOption<'a>>,
 }
 
 /// Parses Packet from byte array
@@ -41,7 +39,7 @@ pub fn decode(p: &[u8]) -> Result<Packet, &'static str> {
             if i + 2 < l {
                 let opt_end = (p[i + 1]) as usize + i + 2;
                 if opt_end < l {
-                    options.push(Option {
+                    options.push(DhcpOption {
                         code: code,
                         data: &p[i + 2..opt_end],
                     });
@@ -69,7 +67,7 @@ pub fn decode(p: &[u8]) -> Result<Packet, &'static str> {
 
 impl<'a> Packet<'a> {
     /// Extracts requested option payload from packet if available
-    pub fn option(&self, code: u8) -> std::option::Option<&'a [u8]> {
+    pub fn option(&self, code: u8) -> Option<&'a [u8]> {
         for option in &self.options {
             if option.code == code {
                 return Some(&option.data);
@@ -79,13 +77,16 @@ impl<'a> Packet<'a> {
     }
 
     /// Convenience function for extracting a packet's message type.
-    pub fn message_type(&self) -> u8 {
+    pub fn message_type(&self) -> Result<MessageType, String> {
         if let Some(x) = self.option(DHCP_MESSAGE_TYPE) {
-            if x.len() > 0 {
-                return x[0];
+            if x.len() != 1 {
+                Err(format!["Invalid length for DHCP MessageType: {}", x.len()])
+            } else {
+                MessageType::from(x[0])
             }
+        } else {
+            Err(format!["Packet does not have MessageType option"])
         }
-        0
     }
 
     /// Creates byte array DHCP packet

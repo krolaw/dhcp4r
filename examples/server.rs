@@ -43,20 +43,25 @@ struct MyServer {
 impl server::Handler for MyServer {
     fn handle_request(&mut self,
                       server: &server::Server,
-                      msg_type: u8,
                       in_packet: packet::Packet) {
-        match msg_type {
-            dhcp4r::DISCOVER => {
+        match in_packet.message_type() {
+            Ok(options::MessageType::Discover) => {
                 // Prefer client's choice if available
                 if let Some(r) = in_packet.option(options::REQUESTED_IP_ADDRESS) {
                     if r.len() == 4 && self.available(&in_packet.chaddr, bytes_u32!(r)) {
-                        reply(server, dhcp4r::OFFER, in_packet, [r[0], r[1], r[2], r[3]]);
+                        reply(server,
+                              options::MessageType::Offer,
+                              in_packet,
+                              [r[0], r[1], r[2], r[3]]);
                         return;
                     }
                 }
                 // Otherwise prefer existing (including expired if available)
                 if let Some(ip) = self.current_lease(&in_packet.chaddr) {
-                    reply(server, dhcp4r::OFFER, in_packet, u32_bytes!(ip));
+                    reply(server,
+                          options::MessageType::Offer,
+                          in_packet,
+                          u32_bytes!(ip));
                     return;
                 }
                 // Otherwise choose a free ip if available
@@ -64,7 +69,7 @@ impl server::Handler for MyServer {
                     self.last_lease = (self.last_lease + 1) % LEASE_NUM;
                     if self.available(&in_packet.chaddr, IP_START_NUM + &self.last_lease) {
                         reply(server,
-                              dhcp4r::OFFER,
+                              options::MessageType::Offer,
                               in_packet,
                               u32_bytes!(IP_START_NUM + &self.last_lease));
                         break;
@@ -72,7 +77,7 @@ impl server::Handler for MyServer {
                 }
             }
 
-            dhcp4r::REQUEST => {
+            Ok(options::MessageType::Request) => {
                 // Ignore requests to alternative DHCP server
                 if !server.for_this_server(&in_packet) {
                     return;
@@ -94,10 +99,11 @@ impl server::Handler for MyServer {
                 }
                 self.leases.insert(req_ip_num,
                                    (in_packet.chaddr, Instant::now().add(self.lease_duration)));
-                reply(server, dhcp4r::ACK, in_packet, req_ip);
+                reply(server, options::MessageType::Ack, in_packet, req_ip);
             }
 
-            dhcp4r::RELEASE | dhcp4r::DECLINE => {
+            Ok(options::MessageType::Release) |
+            Ok(options::MessageType::Decline) => {
                 // Ignore requests to alternative DHCP server
                 if !server.for_this_server(&in_packet) {
                     return;
@@ -132,21 +138,24 @@ impl MyServer {
     }
 }
 
-fn reply(s: &server::Server, msg_type: u8, req_packet: packet::Packet, offer_ip: [u8; 4]) {
+fn reply(s: &server::Server,
+         msg_type: options::MessageType,
+         req_packet: packet::Packet,
+         offer_ip: [u8; 4]) {
     let _ = s.reply(msg_type,
-                    vec![options::Option {
+                    vec![options::DhcpOption {
                              code: options::IP_ADDRESS_LEASE_TIME,
                              data: &LEASE_DURATION_BYTES,
                          },
-                         options::Option {
+                         options::DhcpOption {
                              code: options::SUBNET_MASK,
                              data: &SUBNET_MASK,
                          },
-                         options::Option {
+                         options::DhcpOption {
                              code: options::ROUTER,
                              data: &ROUTER_IP,
                          },
-                         options::Option {
+                         options::DhcpOption {
                              code: options::DOMAIN_NAME_SERVER,
                              data: &DNS_IPS,
                          }],
@@ -155,8 +164,8 @@ fn reply(s: &server::Server, msg_type: u8, req_packet: packet::Packet, offer_ip:
 }
 
 fn nak(s: &server::Server, req_packet: packet::Packet, message: &[u8]) {
-    let _ = s.reply(dhcp4r::NAK,
-                    vec![options::Option {
+    let _ = s.reply(options::MessageType::Nak,
+                    vec![options::DhcpOption {
                              code: options::MESSAGE,
                              data: message,
                          }],

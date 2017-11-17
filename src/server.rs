@@ -2,9 +2,9 @@ use std::net::{UdpSocket, SocketAddr, Ipv4Addr, IpAddr};
 use std;
 use std::cell::Cell;
 
+use options::{DhcpOption, MessageType};
 use packet::*;
 use options;
-use NAK;
 
 ///! This is a convenience module that simplifies the writing of a DHCP server service.
 
@@ -16,13 +16,13 @@ pub struct Server {
 }
 
 pub trait Handler {
-    fn handle_request(&mut self, &Server, u8, Packet);
+    fn handle_request(&mut self, &Server, Packet);
 }
 
 /// Orders and filters options based on PARAMETER_REQUEST_LIST received from client.
 /// DHCP_MESSAGE_TYPE and SERVER_IDENTIFIER are always first and always retained.
 /// This function is called by Reply.
-pub fn filter_options_by_req(opts: &mut Vec<options::Option>, req_params: &[u8]) {
+pub fn filter_options_by_req(opts: &mut Vec<DhcpOption>, req_params: &[u8]) {
     let mut pos = 0;
     let h = &[options::DHCP_MESSAGE_TYPE as u8, options::SERVER_IDENTIFIER as u8, options::IP_ADDRESS_LEASE_TIME as u8] as &[u8];
     for z in [h, req_params].iter() {
@@ -62,13 +62,8 @@ impl Server {
                 Err(e) => return e,
                 Ok((l, src)) => {
                     if let Ok(p) = decode(&in_buf[..l]) {
-                        if let Some(msg_type) = p.option(options::DHCP_MESSAGE_TYPE) {
-                            if msg_type.len() != 1 {
-                                continue;
-                            }
-                            s.src = src;
-                            handler.handle_request(&s, msg_type[0], p);
-                        }
+                        s.src = src;
+                        handler.handle_request(&s, p);
                     }
                 }
             }
@@ -79,19 +74,25 @@ impl Server {
     /// additional_options should not include DHCP_MESSAGE_TYPE nor SERVER_IDENTIFIER as these
     /// are added automatically.
     pub fn reply(&self,
-                 msg_type: u8,
-                 additional_options: Vec<options::Option>,
+                 msg_type: MessageType,
+                 additional_options: Vec<DhcpOption>,
                  offer_ip: [u8; 4],
                  req_packet: Packet)
                  -> std::io::Result<usize> {
-        let mt = &[msg_type];
 
-        let mut opts: Vec<options::Option> = Vec::with_capacity(additional_options.len() + 2);
-        opts.push(options::Option {
+        let ciaddr = match msg_type {
+            MessageType::Nak => [0, 0, 0, 0],
+            _ => req_packet.ciaddr,
+        };
+
+        let mt = &[msg_type as u8];
+
+        let mut opts: Vec<DhcpOption> = Vec::with_capacity(additional_options.len() + 2);
+        opts.push(DhcpOption {
             code: options::DHCP_MESSAGE_TYPE,
             data: mt,
         });
-        opts.push(options::Option {
+        opts.push(DhcpOption {
             code: options::SERVER_IDENTIFIER,
             data: &self.server_ip,
         });
@@ -107,11 +108,7 @@ impl Server {
             xid: req_packet.xid,
             secs: 0,
             broadcast: req_packet.broadcast,
-            ciaddr: if msg_type == NAK {
-                [0, 0, 0, 0]
-            } else {
-                req_packet.ciaddr
-            },
+            ciaddr: ciaddr,
             yiaddr: offer_ip,
             siaddr: [0, 0, 0, 0],
             giaddr: req_packet.giaddr,
