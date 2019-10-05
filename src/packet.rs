@@ -1,4 +1,4 @@
-use options::*;
+use crate::options::*;
 
 /// DHCP Packet Structure
 pub struct Packet<'a> {
