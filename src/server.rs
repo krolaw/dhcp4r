@@ -2,9 +2,9 @@ use std::net::{UdpSocket, SocketAddr, Ipv4Addr, IpAddr};
 use std;
 use std::cell::Cell;
 
-use options::{DhcpOption, MessageType};
-use packet::*;
-use options;
+use crate::options::{DhcpOption, MessageType};
+use crate::packet::*;
+use crate::options;
 
 ///! This is a convenience module that simplifies the writing of a DHCP server service.
 
@@ -16,7 +16,7 @@ pub struct Server {
 }
 
 pub trait Handler {
-    fn handle_request(&mut self, &Server, Packet);
+    fn handle_request(&mut self, server: &Server, in_packet: Packet);
 }
 
 /// Orders and filters options based on PARAMETER_REQUEST_LIST received from client.
