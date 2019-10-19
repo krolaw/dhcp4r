@@ -12,7 +12,7 @@ pub struct Server {
     out_buf: Cell<[u8; 1500]>,
     socket: UdpSocket,
     src: SocketAddr,
-    server_ip: [u8; 4],
+    server_ip: Ipv4Addr,
 }
 
 pub trait Handler {
@@ -30,7 +30,7 @@ pub fn filter_options_by_req(opts: &mut Vec<DhcpOption>, req_params: &[u8]) {
             let mut found = false;
             let mut at = 0;
             for (i, o) in opts[pos..].iter().enumerate() {
-                if o.code == *r {
+                if o.code() == *r {
                     found = true;
                     at = i + pos;
                     break;
@@ -47,7 +47,7 @@ pub fn filter_options_by_req(opts: &mut Vec<DhcpOption>, req_params: &[u8]) {
 
 impl Server {
     pub fn serve<H: Handler>(udp_soc: UdpSocket,
-                             server_ip: [u8; 4],
+                             server_ip: Ipv4Addr,
                              mut handler: H)
                              -> std::io::Error {
         let mut in_buf: [u8; 1500] = [0; 1500];
@@ -61,7 +61,7 @@ impl Server {
             match s.socket.recv_from(&mut in_buf) {
                 Err(e) => return e,
                 Ok((l, src)) => {
-                    if let Ok(p) = decode(&in_buf[..l]) {
+                    if let Ok(p) = Packet::from(&in_buf[..l]) {
                         s.src = src;
                         handler.handle_request(&s, p);
                     }
@@ -76,29 +76,31 @@ impl Server {
     pub fn reply(&self,
                  msg_type: MessageType,
                  additional_options: Vec<DhcpOption>,
-                 offer_ip: [u8; 4],
+                 offer_ip: Ipv4Addr,
                  req_packet: Packet)
                  -> std::io::Result<usize> {
 
         let ciaddr = match msg_type {
-            MessageType::Nak => [0, 0, 0, 0],
+            MessageType::Nak => Ipv4Addr::new(0, 0, 0, 0),
             _ => req_packet.ciaddr,
         };
 
-        let mt = &[msg_type as u8];
+        //let mt = &[msg_type as u8];
 
         let mut opts: Vec<DhcpOption> = Vec::with_capacity(additional_options.len() + 2);
-        opts.push(DhcpOption {
+        opts.push(DhcpOption::DhcpMessageType(msg_type));
+        opts.push(DhcpOption::ServerIdentifier(self.server_ip));
+        /*opts.push(DhcpOption {
             code: options::DHCP_MESSAGE_TYPE,
             data: mt,
         });
         opts.push(DhcpOption {
             code: options::SERVER_IDENTIFIER,
             data: &self.server_ip,
-        });
+        });*/
         opts.extend(additional_options);
 
-        if let Some(prl) = req_packet.option(options::PARAMETER_REQUEST_LIST) {
+        if let Some(DhcpOption::ParameterRequestList(prl)) = req_packet.option(options::PARAMETER_REQUEST_LIST) {
             filter_options_by_req(&mut opts, &prl);
         }
 
@@ -110,7 +112,7 @@ impl Server {
             broadcast: req_packet.broadcast,
             ciaddr: ciaddr,
             yiaddr: offer_ip,
-            siaddr: [0, 0, 0, 0],
+            siaddr: Ipv4Addr::new(0, 0, 0, 0),
             giaddr: req_packet.giaddr,
             chaddr: req_packet.chaddr,
             options: opts,
@@ -120,8 +122,8 @@ impl Server {
     /// Checks the packet see if it was intended for this DHCP server (as opposed to some other also on the network).
     pub fn for_this_server(&self, packet: &Packet) -> bool {
         match packet.option(options::SERVER_IDENTIFIER) {
-            None => false,
-            Some(x) => (x == &self.server_ip),
+            Some(DhcpOption::ServerIdentifier(x)) => (x == &self.server_ip),
+            _ => false,
         }
     }
 

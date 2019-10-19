@@ -1,16 +1,104 @@
+use std::net::Ipv4Addr;
 use num_traits::FromPrimitive;
 
-pub struct DhcpOption<'a> {
+#[derive(PartialEq, Clone)]
+pub struct RawDhcpOption {
     pub code: u8,
-    pub data: &'a [u8],
+    pub data: Vec<u8>,
 }
 
-impl<'a> DhcpOption<'a> {
-    /// Returns name of DHCP Option code
-    pub fn title(&'a self) -> String {
-        match title(self.code) {
-            Some(t) => t.to_string(),
-            None => "Unknown (".to_string() + &self.code.to_string() + ")",
+#[derive(PartialEq)]
+pub enum DhcpOption {
+    DhcpMessageType(MessageType),
+    ServerIdentifier(Ipv4Addr),
+    ParameterRequestList(Vec<u8>),
+    RequestedIpAddress(Ipv4Addr),
+    HostName(String),
+    Router(Vec<Ipv4Addr>),
+    DomainNameServer(Vec<Ipv4Addr>),
+    IpAddressLeaseTime(u32),
+    SubnetMask(Ipv4Addr),
+    Message(String),
+    Unrecognized(RawDhcpOption),
+}
+
+impl DhcpOption {
+    pub fn to_raw(&self) -> RawDhcpOption {
+        match self {
+            Self::DhcpMessageType(mtype) => RawDhcpOption{
+                code: DHCP_MESSAGE_TYPE,
+                data: vec![*mtype as u8],
+            },
+            Self::ServerIdentifier(addr) => RawDhcpOption{
+                code: SERVER_IDENTIFIER,
+                data: addr.octets().to_vec(),
+            },
+            Self::ParameterRequestList(prl) => RawDhcpOption{
+                code: PARAMETER_REQUEST_LIST,
+                data: prl.clone(),
+            },
+            Self::RequestedIpAddress(addr) => RawDhcpOption{
+                code: REQUESTED_IP_ADDRESS,
+                data: addr.octets().to_vec(),
+            },
+            Self::HostName(name) => RawDhcpOption{
+                code: HOST_NAME,
+                data: name.as_bytes().to_vec(),
+            },
+            Self::Router(addrs) => RawDhcpOption{
+                code: ROUTER,
+                data: {
+                    let mut v = vec!();
+                    for a in addrs {
+                        v.extend(a.octets().iter());
+                    }
+                    v
+                }
+            },
+            Self::DomainNameServer(addrs) => RawDhcpOption{
+                code: DOMAIN_NAME_SERVER,
+                data: {
+                    let mut v = vec!();
+                    for a in addrs {
+                        v.extend(a.octets().iter());
+                    }
+                    v
+                }
+            },
+            Self::IpAddressLeaseTime(secs) => RawDhcpOption{
+                code: IP_ADDRESS_LEASE_TIME,
+                data: [
+                    (secs & 0xFF) as u8,
+                    ((secs >> 8) & 0xFFu32) as u8,
+                    ((secs >> 16) & 0xFFu32) as u8,
+                    ((secs >> 24) & 0xFFu32) as u8,
+                ].to_vec(),
+            },
+            Self::SubnetMask(mask) => RawDhcpOption{
+                code: SUBNET_MASK,
+                data: mask.octets().to_vec(),
+            },
+            Self::Message(msg) => RawDhcpOption{
+                code: MESSAGE,
+                data: msg.as_bytes().to_vec(),
+            },
+            Self::Unrecognized(raw) => raw.clone(),
+        }
+    }
+
+    pub fn code(&self) -> u8 {
+        match self {
+            Self::DhcpMessageType(_) => DHCP_MESSAGE_TYPE,
+            Self::ServerIdentifier(_) => SERVER_IDENTIFIER,
+            Self::ParameterRequestList(_) => PARAMETER_REQUEST_LIST,
+            Self::RequestedIpAddress(_) => REQUESTED_IP_ADDRESS,
+            Self::HostName(_) => HOST_NAME,
+            Self::Router(_) => ROUTER,
+            Self::DomainNameServer(_) => DOMAIN_NAME_SERVER,
+            Self::IpAddressLeaseTime(_) => IP_ADDRESS_LEASE_TIME,
+            Self::SubnetMask(_) => SUBNET_MASK,
+            Self::Message(_) => MESSAGE,
+            Self::Unrecognized(x) => x.code,
         }
     }
 }
@@ -235,7 +323,7 @@ pub fn title(code: u8) -> Option<&'static str> {
 /// > This option is used to convey the type of the DHCP message.  The code for this option is 53,
 /// > and its length is 1.
 ///
-#[derive(Primitive)]
+#[derive(Primitive, Copy, Clone, PartialEq)]
 pub enum MessageType {
     /// Client broadcast to locate available servers.
     Discover = 1,

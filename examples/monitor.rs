@@ -5,7 +5,7 @@ use std::net::{UdpSocket,Ipv4Addr};
 use dhcp4r::{packet, options, server};
 
 fn main() {
-    server::Server::serve(UdpSocket::bind("0.0.0.0:67").unwrap(), [0,0,0,0], MyServer{});
+    server::Server::serve(UdpSocket::bind("0.0.0.0:67").unwrap(), Ipv4Addr::new(0,0,0,0), MyServer{});
 }
 
 struct MyServer {}
@@ -15,14 +15,10 @@ impl server::Handler for MyServer {
         match in_packet.message_type() {
             Ok(options::MessageType::Request) => {
                 let req_ip = match in_packet.option(options::REQUESTED_IP_ADDRESS) {
-                    None => in_packet.ciaddr,
-                    Some(x) => {
-                        if x.len() != 4 {
-                            return;
-                        } else {
-                            [x[0], x[1], x[2], x[3]]
-                        }
-                    }
+                    Some(options::DhcpOption::RequestedIpAddress(x)) => {
+                        x.clone()
+                    },
+                    _ => in_packet.ciaddr,
                 };
                 println!("{}\t{}\t{}\tOnline", time::now().strftime("%Y-%m-%dT%H:%M:%S").unwrap(),
                  chaddr(&in_packet.chaddr), Ipv4Addr::from(req_ip));

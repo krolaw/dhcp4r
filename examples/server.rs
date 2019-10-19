@@ -1,7 +1,7 @@
 #[macro_use(u32_bytes, bytes_u32)]
 extern crate dhcp4r;
 
-use std::net::UdpSocket;
+use std::net::{UdpSocket, Ipv4Addr};
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use std::ops::Add;
@@ -9,16 +9,18 @@ use std::ops::Add;
 use dhcp4r::{packet, options, server};
 
 // Server configuration
-const SERVER_IP: [u8; 4] = [192, 168, 0, 76];
+const SERVER_IP: Ipv4Addr = Ipv4Addr::new(192, 168, 0, 76);
 const IP_START: [u8; 4] = [192, 168, 0, 180];
-const SUBNET_MASK: [u8; 4] = [255, 255, 255, 0];
-const DNS_IPS: [u8; 8] = [8, 8, 8, 8, 8, 8, 4, 4]; // google dns servers
-const ROUTER_IP: [u8; 4] = [192, 168, 0, 254];
+const SUBNET_MASK: Ipv4Addr = Ipv4Addr::new(255, 255, 255, 0);
+const DNS_IPS: [Ipv4Addr; 2] = [ // Google DNS servers
+    Ipv4Addr::new(8, 8, 8, 8),
+    Ipv4Addr::new(4, 4, 4, 4),
+];
+const ROUTER_IP: Ipv4Addr = Ipv4Addr::new(192, 168, 0, 254);
 const LEASE_DURATION_SECS: u32 = 7200;
 const LEASE_NUM: u32 = 100;
 
-// Derrived constants
-const LEASE_DURATION_BYTES: [u8; 4] = u32_bytes!(LEASE_DURATION_SECS);
+// Derived constants
 const IP_START_NUM: u32 = bytes_u32!(IP_START);
 
 fn main() {
@@ -35,7 +37,7 @@ fn main() {
 }
 
 struct MyServer {
-    leases: HashMap<u32, ([u8; 6], Instant)>,
+    leases: HashMap<Ipv4Addr, ([u8; 6], Instant)>,
     last_lease: u32,
     lease_duration: Duration,
 }
@@ -47,12 +49,13 @@ impl server::Handler for MyServer {
         match in_packet.message_type() {
             Ok(options::MessageType::Discover) => {
                 // Prefer client's choice if available
-                if let Some(r) = in_packet.option(options::REQUESTED_IP_ADDRESS) {
-                    if r.len() == 4 && self.available(&in_packet.chaddr, bytes_u32!(r)) {
+                if let Some(options::DhcpOption::RequestedIpAddress(addr)) = in_packet.option(options::REQUESTED_IP_ADDRESS) {
+                    let addr = *addr;
+                    if self.available(&in_packet.chaddr, &addr) {
                         reply(server,
                               options::MessageType::Offer,
                               in_packet,
-                              [r[0], r[1], r[2], r[3]]);
+                              &addr);
                         return;
                     }
                 }
@@ -61,17 +64,17 @@ impl server::Handler for MyServer {
                     reply(server,
                           options::MessageType::Offer,
                           in_packet,
-                          u32_bytes!(ip));
+                          &ip);
                     return;
                 }
                 // Otherwise choose a free ip if available
                 for _ in 0..LEASE_NUM {
                     self.last_lease = (self.last_lease + 1) % LEASE_NUM;
-                    if self.available(&in_packet.chaddr, IP_START_NUM + &self.last_lease) {
+                    if self.available(&in_packet.chaddr, &((IP_START_NUM + &self.last_lease).into())) {
                         reply(server,
                               options::MessageType::Offer,
                               in_packet,
-                              u32_bytes!(IP_START_NUM + &self.last_lease));
+                              &((IP_START_NUM + &self.last_lease).into()));
                         break;
                     }
                 }
@@ -83,23 +86,16 @@ impl server::Handler for MyServer {
                     return;
                 }
                 let req_ip = match in_packet.option(options::REQUESTED_IP_ADDRESS) {
-                    None => in_packet.ciaddr,
-                    Some(x) => {
-                        if x.len() != 4 {
-                            return;
-                        } else {
-                            [x[0], x[1], x[2], x[3]]
-                        }
-                    }
+                    Some(options::DhcpOption::RequestedIpAddress(x)) => *x,
+                    _ => in_packet.ciaddr,
                 };
-                let req_ip_num = bytes_u32!(req_ip);
-                if !&self.available(&in_packet.chaddr, req_ip_num) {
-                    nak(server, in_packet, b"Requested IP not available");
+                if !&self.available(&in_packet.chaddr, &req_ip) {
+                    nak(server, in_packet, "Requested IP not available");
                     return;
                 }
-                self.leases.insert(req_ip_num,
+                self.leases.insert(req_ip,
                                    (in_packet.chaddr, Instant::now().add(self.lease_duration)));
-                reply(server, options::MessageType::Ack, in_packet, req_ip);
+                reply(server, options::MessageType::Ack, in_packet, &req_ip);
             }
 
             Ok(options::MessageType::Release) |
@@ -120,15 +116,16 @@ impl server::Handler for MyServer {
 }
 
 impl MyServer {
-    fn available(&self, chaddr: &[u8; 6], pos: u32) -> bool {
-        return pos >= IP_START_NUM && pos < IP_START_NUM + LEASE_NUM &&
-               match self.leases.get(&pos) {
-            Some(x) => x.0 == *chaddr || Instant::now().gt(&x.1),
-            None => true,
-        };
+    fn available(&self, chaddr: &[u8; 6], addr: &Ipv4Addr) -> bool {
+        let pos: u32 = (*addr).into();
+        pos >= IP_START_NUM && pos < IP_START_NUM + LEASE_NUM &&
+            match self.leases.get(addr) {
+                Some(x) => x.0 == *chaddr || Instant::now().gt(&x.1),
+                None => true,
+            }
     }
 
-    fn current_lease(&self, chaddr: &[u8; 6]) -> Option<u32> {
+    fn current_lease(&self, chaddr: &[u8; 6]) -> Option<Ipv4Addr> {
         for (i, v) in &self.leases {
             if &v.0 == chaddr {
                 return Some(*i);
@@ -141,34 +138,24 @@ impl MyServer {
 fn reply(s: &server::Server,
          msg_type: options::MessageType,
          req_packet: packet::Packet,
-         offer_ip: [u8; 4]) {
-    let _ = s.reply(msg_type,
-                    vec![options::DhcpOption {
-                             code: options::IP_ADDRESS_LEASE_TIME,
-                             data: &LEASE_DURATION_BYTES,
-                         },
-                         options::DhcpOption {
-                             code: options::SUBNET_MASK,
-                             data: &SUBNET_MASK,
-                         },
-                         options::DhcpOption {
-                             code: options::ROUTER,
-                             data: &ROUTER_IP,
-                         },
-                         options::DhcpOption {
-                             code: options::DOMAIN_NAME_SERVER,
-                             data: &DNS_IPS,
-                         }],
-                    offer_ip,
-                    req_packet);
+         offer_ip: &Ipv4Addr) {
+    let _ = s.reply(
+        msg_type,
+        vec![
+            options::DhcpOption::IpAddressLeaseTime(LEASE_DURATION_SECS),
+            options::DhcpOption::SubnetMask(SUBNET_MASK),
+            options::DhcpOption::Router(vec![ROUTER_IP]),
+            options::DhcpOption::DomainNameServer(DNS_IPS.to_vec()),
+        ],
+        *offer_ip,
+        req_packet);
 }
 
-fn nak(s: &server::Server, req_packet: packet::Packet, message: &[u8]) {
-    let _ = s.reply(options::MessageType::Nak,
-                    vec![options::DhcpOption {
-                             code: options::MESSAGE,
-                             data: message,
-                         }],
-                    [0, 0, 0, 0],
-                    req_packet);
+fn nak(s: &server::Server, req_packet: packet::Packet, message: &str) {
+    let _ = s.reply(
+        options::MessageType::Nak,
+        vec![options::DhcpOption::Message(message.to_string())],
+        Ipv4Addr::new(0, 0, 0, 0),
+        req_packet
+    );
 }

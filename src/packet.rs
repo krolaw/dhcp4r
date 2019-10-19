@@ -1,76 +1,163 @@
 use crate::options::*;
 
+use std::net::Ipv4Addr;
+use nom::bytes::complete::{tag, take};
+use nom::number::complete::{be_u16, be_u32, be_u8};
+use nom::multi::{many0, many_till};
+
+pub enum Err<I> {
+    NomError(nom::Err<(I,nom::error::ErrorKind)>),
+    NonUtf8String,
+    UnrecognizedMessageType,
+    InvalidHlen,
+}
+
+impl<I> nom::error::ParseError<I> for Err<I> {
+    fn from_error_kind(input: I, kind: nom::error::ErrorKind) -> Self {
+        Err::NomError(nom::Err::Error((input, kind)))
+    }
+
+    fn append(_input: I, _kind: nom::error::ErrorKind, other: Self) -> Self {
+        other
+    }
+}
+
+type IResult<I, O> = nom::IResult<I, O, Err<I>>;
+
 /// DHCP Packet Structure
-pub struct Packet<'a> {
+pub struct Packet {
     pub reply: bool, // false = request, true = reply
     pub hops: u8,
-    pub xid: [u8; 4], // Random identifier
+    pub xid: u32, // Random identifier
     pub secs: u16,
     pub broadcast: bool,
-    pub ciaddr: [u8; 4],
-    pub yiaddr: [u8; 4],
-    pub siaddr: [u8; 4],
-    pub giaddr: [u8; 4],
+    pub ciaddr: Ipv4Addr,
+    pub yiaddr: Ipv4Addr,
+    pub siaddr: Ipv4Addr,
+    pub giaddr: Ipv4Addr,
     pub chaddr: [u8; 6],
-    pub options: Vec<DhcpOption<'a>>,
+    pub options: Vec<DhcpOption>,
+}
+
+fn decode_reply(input: &[u8]) -> IResult<&[u8], bool> {
+    let (input, reply) = take(1u8)(input)?;
+    Ok((input, match reply[0] {
+        BOOT_REPLY => true,
+        BOOT_REQUEST => false,
+        _ => {
+            // @TODO: Throw an error
+            false
+        }
+    }))
+}
+
+fn decode_ipv4(p: &[u8]) -> IResult<&[u8], Ipv4Addr> {
+    let (input, addr) = take(4u8)(p)?;
+    Ok((input, Ipv4Addr::new(addr[0], addr[1], addr[2], addr[3])))
+}
+
+pub fn decode_option(input: &[u8]) -> IResult<&[u8], DhcpOption> {
+    let (input, code) = be_u8(input)?;
+    assert!(code != END);
+
+    let (input, len) = be_u8(input)?;
+    let (input, data) = take(len)(input)?;
+    let option = match code {
+        DHCP_MESSAGE_TYPE => DhcpOption::DhcpMessageType(
+            match MessageType::from(be_u8(data)?.1) {
+                Ok(x) => x,
+                Err(_) => return Err(nom::Err::Error(Err::UnrecognizedMessageType)),
+            }
+        ),
+        SERVER_IDENTIFIER => DhcpOption::ServerIdentifier(
+            decode_ipv4(data)?.1
+        ),
+        PARAMETER_REQUEST_LIST => DhcpOption::ParameterRequestList(
+            data.to_vec()
+        ),
+        REQUESTED_IP_ADDRESS => DhcpOption::RequestedIpAddress(
+            decode_ipv4(data)?.1
+        ),
+        HOST_NAME => DhcpOption::HostName(
+            match std::str::from_utf8(data) {
+                Ok(s) => s.to_string(),
+                Err(_) => return Err(nom::Err::Error(Err::NonUtf8String)),
+            }
+        ),
+        ROUTER => DhcpOption::Router(
+            many0(decode_ipv4)(data)?.1
+        ),
+        DOMAIN_NAME_SERVER => DhcpOption::DomainNameServer(
+            many0(decode_ipv4)(data)?.1
+        ),
+        IP_ADDRESS_LEASE_TIME => DhcpOption::IpAddressLeaseTime(
+            be_u32(data)?.1
+        ),
+        MESSAGE => DhcpOption::Message(
+            match std::str::from_utf8(data) {
+                Ok(s) => s.to_string(),
+                Err(_) => return Err(nom::Err::Error(Err::NonUtf8String)),
+            }
+        ),
+        _ => DhcpOption::Unrecognized(RawDhcpOption{
+            code: code,
+            data: data.to_vec(),
+        })
+    };
+    Ok((input, option))
 }
 
 /// Parses Packet from byte array
-pub fn decode(p: &[u8]) -> Result<Packet, &'static str> {
-    if p[236..240] != COOKIE {
-        return Err("Invalid Cookie");
-    }
+fn decode(input: &[u8]) -> IResult<&[u8], Packet> {
+    let (options_input, input) = take(236u32)(input)?;
 
-    let reply = match p[0] {
-        BOOT_REPLY => true,
-        BOOT_REQUEST => false,
-        _ => return Err("Invalid OpCode"),
-    };
-    // TODO hlen check
-    let mut options = Vec::new();
-    let mut i: usize = 240;
-    loop {
-        let l = p.len();
-        if i < l {
-            let code = p[i];
-            if code == END {
-                break;
-            }
-            if i + 2 < l {
-                let opt_end = (p[i + 1]) as usize + i + 2;
-                if opt_end < l {
-                    options.push(DhcpOption {
-                        code: code,
-                        data: &p[i + 2..opt_end],
-                    });
-                    i = opt_end;
-                    continue;
-                }
-            }
-        }
-        return Err("Options Problem");
+    let (input, reply) = decode_reply(input)?;
+    let (input, _htype) = take(1u8)(input)?;
+    let (input, hlen) = be_u8(input)?;
+    let (input, hops) = be_u8(input)?;
+    let (input, xid) = be_u32(input)?;
+    let (input, secs) = be_u16(input)?;
+    let (input, flags) = be_u16(input)?;
+    let (input, ciaddr) = decode_ipv4(input)?;
+    let (input, yiaddr) = decode_ipv4(input)?;
+    let (input, siaddr) = decode_ipv4(input)?;
+    let (input, giaddr) = decode_ipv4(input)?;
+
+    if hlen != 6 {
+        return Err(nom::Err::Error(Err::InvalidHlen));
     }
-    Ok(Packet {
+    let (_, chaddr) = take(6u8)(input)?;
+
+    let input = options_input;
+    let (input, _) = tag(COOKIE)(input)?;
+
+    let (input, (options, _)) = many_till(decode_option, tag(&[END]))(input)?;
+
+    Ok((input, Packet{
         reply: reply,
-        hops: p[3],
-        secs: ((p[8] as u16) << 8) + p[9] as u16,
-        broadcast: p[10] & 128 == 128,
-        ciaddr: [p[12], p[13], p[14], p[15]],
-        yiaddr: [p[16], p[17], p[18], p[19]],
-        siaddr: [p[20], p[21], p[22], p[23]],
-        giaddr: [p[24], p[25], p[26], p[27]],
+        hops: hops,
+        secs: secs,
+        broadcast: flags & 128 == 128,
+        ciaddr: ciaddr,
+        yiaddr: yiaddr,
+        siaddr: siaddr,
+        giaddr: giaddr,
         options: options,
-        chaddr: [p[28], p[29], p[30], p[31], p[32], p[33]],
-        xid: [p[4], p[5], p[6], p[7]],
-    })
+        chaddr: [chaddr[0], chaddr[1], chaddr[2], chaddr[3], chaddr[4], chaddr[5]],
+        xid: xid,
+    }))
 }
 
-impl<'a> Packet<'a> {
+impl Packet {
+    pub fn from(input: &[u8]) -> Result<Packet, nom::Err<Err<&[u8]>>> {
+        Ok(decode(input)?.1)
+    }
+
     /// Extracts requested option payload from packet if available
-    pub fn option(&self, code: u8) -> Option<&'a [u8]> {
+    pub fn option<'a>(&'a self, code: u8) -> Option<&'a DhcpOption> {
         for option in &self.options {
-            if option.code == code {
-                return Some(&option.data);
+            if option.code() == code {
+                return Some(&option);
             }
         }
         None
@@ -78,14 +165,10 @@ impl<'a> Packet<'a> {
 
     /// Convenience function for extracting a packet's message type.
     pub fn message_type(&self) -> Result<MessageType, String> {
-        if let Some(x) = self.option(DHCP_MESSAGE_TYPE) {
-            if x.len() != 1 {
-                Err(format!["Invalid length for DHCP MessageType: {}", x.len()])
-            } else {
-                MessageType::from(x[0])
-            }
-        } else {
-            Err(format!["Packet does not have MessageType option"])
+        match self.option(DHCP_MESSAGE_TYPE) {
+            Some(DhcpOption::DhcpMessageType(msgtype)) => Ok(*msgtype),
+            Some(_) => Err(format!["Got wrong enum type for DHCP_MESSAGE_TYPE"]),
+            None => Err(format!["Packet does not have MessageType option"]),
         }
     }
 
@@ -99,10 +182,10 @@ impl<'a> Packet<'a> {
                                    1,
                                    6,
                                    self.hops,
-                                   self.xid[0],
-                                   self.xid[1],
-                                   self.xid[2],
-                                   self.xid[3],
+                                   ((self.xid >> 24) & 0xFF) as u8,
+                                   ((self.xid >> 16) & 0xFF) as u8,
+                                   ((self.xid >> 8) & 0xFF) as u8,
+                                   (self.xid & 0xFF) as u8,
                                    (self.secs >> 8) as u8,
                                    (self.secs & 255) as u8,
                                    (if self.broadcast {
@@ -111,19 +194,20 @@ impl<'a> Packet<'a> {
                                        0
                                    }),
                                    0]);
-        p[12..16].clone_from_slice(&self.ciaddr);
-        p[16..20].clone_from_slice(&self.yiaddr);
-        p[20..24].clone_from_slice(&self.siaddr);
-        p[24..28].clone_from_slice(&self.giaddr);
+        p[12..16].clone_from_slice(&self.ciaddr.octets());
+        p[16..20].clone_from_slice(&self.yiaddr.octets());
+        p[20..24].clone_from_slice(&self.siaddr.octets());
+        p[24..28].clone_from_slice(&self.giaddr.octets());
         p[28..34].clone_from_slice(&self.chaddr);
         p[34..236].clone_from_slice(&[0; 202]);
         p[236..240].clone_from_slice(&COOKIE);
 
         let mut length: usize = 240;
         for option in &self.options {
+            let option = option.to_raw();
             p[length] = option.code;
             p[length + 1] = option.data.len() as u8;
-            p[length + 2..length + 2 + option.data.len()].clone_from_slice(option.data);
+            p[length + 2..length + 2 + option.data.len()].clone_from_slice(&option.data);
             length += 2 + option.data.len();
         }
         p[length] = END;
