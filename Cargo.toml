@@ -19,5 +19,5 @@ license = "BSD-3-Clause"
 [dependencies]
 enum-primitive-derive = "^0.2"
 num-traits = "^0.2"
-time = "0.1"
+time = "0.2"
 nom = "6.0"
