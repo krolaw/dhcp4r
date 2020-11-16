@@ -85,7 +85,7 @@ pub fn decode_option(input: &[u8]) -> IResult<&[u8], DhcpOption> {
             Err(_) => return Err(nom::Err::Error(Err::NonUtf8String)),
         }),
         _ => DhcpOption::Unrecognized(RawDhcpOption {
-            code: code,
+            code,
             data: data.to_vec(),
         }),
     };
@@ -121,19 +121,19 @@ fn decode(input: &[u8]) -> IResult<&[u8], Packet> {
     Ok((
         input,
         Packet {
-            reply: reply,
-            hops: hops,
-            secs: secs,
+            reply,
+            hops,
+            secs,
             broadcast: flags & 128 == 128,
-            ciaddr: ciaddr,
-            yiaddr: yiaddr,
-            siaddr: siaddr,
-            giaddr: giaddr,
-            options: options,
+            ciaddr,
+            yiaddr,
+            siaddr,
+            giaddr,
+            options,
             chaddr: [
                 chaddr[0], chaddr[1], chaddr[2], chaddr[3], chaddr[4], chaddr[5],
             ],
-            xid: xid,
+            xid,
         },
     ))
 }
@@ -144,7 +144,7 @@ impl Packet {
     }
 
     /// Extracts requested option payload from packet if available
-    pub fn option<'a>(&'a self, code: u8) -> Option<&'a DhcpOption> {
+    pub fn option(&self, code: u8) -> Option<&DhcpOption> {
         for option in &self.options {
             if option.code() == code {
                 return Some(&option);
@@ -157,8 +157,11 @@ impl Packet {
     pub fn message_type(&self) -> Result<MessageType, String> {
         match self.option(DHCP_MESSAGE_TYPE) {
             Some(DhcpOption::DhcpMessageType(msgtype)) => Ok(*msgtype),
-            Some(_) => Err(format!["Got wrong enum type for DHCP_MESSAGE_TYPE"]),
-            None => Err(format!["Packet does not have MessageType option"]),
+            Some(option) => Err(format![
+                "Got wrong enum code {} for DHCP_MESSAGE_TYPE",
+                option.code()
+            ]),
+            None => Err("Packet does not have MessageType option".to_string()),
         }
     }
 

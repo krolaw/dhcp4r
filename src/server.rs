@@ -1,4 +1,3 @@
-use std;
 use std::cell::Cell;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 
@@ -42,7 +41,7 @@ pub fn filter_options_by_req(opts: &mut Vec<DhcpOption>, req_params: &[u8]) {
             }
             if found {
                 opts.swap(pos, at);
-                pos = pos + 1;
+                pos += 1;
             }
         }
     }
@@ -59,7 +58,7 @@ impl Server {
         let mut s = Server {
             out_buf: Cell::new([0; 1500]),
             socket: udp_soc,
-            server_ip: server_ip,
+            server_ip,
             src: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
         };
         loop {
@@ -117,7 +116,7 @@ impl Server {
             xid: req_packet.xid,
             secs: 0,
             broadcast: req_packet.broadcast,
-            ciaddr: ciaddr,
+            ciaddr,
             yiaddr: offer_ip,
             siaddr: Ipv4Addr::new(0, 0, 0, 0),
             giaddr: req_packet.giaddr,
