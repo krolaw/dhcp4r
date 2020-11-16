@@ -1,5 +1,5 @@
-use std::net::Ipv4Addr;
 use num_traits::FromPrimitive;
+use std::net::Ipv4Addr;
 
 #[derive(PartialEq, Clone)]
 pub struct RawDhcpOption {
@@ -25,60 +25,61 @@ pub enum DhcpOption {
 impl DhcpOption {
     pub fn to_raw(&self) -> RawDhcpOption {
         match self {
-            Self::DhcpMessageType(mtype) => RawDhcpOption{
+            Self::DhcpMessageType(mtype) => RawDhcpOption {
                 code: DHCP_MESSAGE_TYPE,
                 data: vec![*mtype as u8],
             },
-            Self::ServerIdentifier(addr) => RawDhcpOption{
+            Self::ServerIdentifier(addr) => RawDhcpOption {
                 code: SERVER_IDENTIFIER,
                 data: addr.octets().to_vec(),
             },
-            Self::ParameterRequestList(prl) => RawDhcpOption{
+            Self::ParameterRequestList(prl) => RawDhcpOption {
                 code: PARAMETER_REQUEST_LIST,
                 data: prl.clone(),
             },
-            Self::RequestedIpAddress(addr) => RawDhcpOption{
+            Self::RequestedIpAddress(addr) => RawDhcpOption {
                 code: REQUESTED_IP_ADDRESS,
                 data: addr.octets().to_vec(),
             },
-            Self::HostName(name) => RawDhcpOption{
+            Self::HostName(name) => RawDhcpOption {
                 code: HOST_NAME,
                 data: name.as_bytes().to_vec(),
             },
-            Self::Router(addrs) => RawDhcpOption{
+            Self::Router(addrs) => RawDhcpOption {
                 code: ROUTER,
                 data: {
-                    let mut v = vec!();
+                    let mut v = vec![];
                     for a in addrs {
                         v.extend(a.octets().iter());
                     }
                     v
-                }
+                },
             },
-            Self::DomainNameServer(addrs) => RawDhcpOption{
+            Self::DomainNameServer(addrs) => RawDhcpOption {
                 code: DOMAIN_NAME_SERVER,
                 data: {
-                    let mut v = vec!();
+                    let mut v = vec![];
                     for a in addrs {
                         v.extend(a.octets().iter());
                     }
                     v
-                }
+                },
             },
-            Self::IpAddressLeaseTime(secs) => RawDhcpOption{
+            Self::IpAddressLeaseTime(secs) => RawDhcpOption {
                 code: IP_ADDRESS_LEASE_TIME,
                 data: [
                     (secs & 0xFF) as u8,
                     ((secs >> 8) & 0xFFu32) as u8,
                     ((secs >> 16) & 0xFFu32) as u8,
                     ((secs >> 24) & 0xFFu32) as u8,
-                ].to_vec(),
+                ]
+                .to_vec(),
             },
-            Self::SubnetMask(mask) => RawDhcpOption{
+            Self::SubnetMask(mask) => RawDhcpOption {
                 code: SUBNET_MASK,
                 data: mask.octets().to_vec(),
             },
-            Self::Message(msg) => RawDhcpOption{
+            Self::Message(msg) => RawDhcpOption {
                 code: MESSAGE,
                 data: msg.as_bytes().to_vec(),
             },

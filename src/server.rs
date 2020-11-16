@@ -1,10 +1,10 @@
-use std::net::{UdpSocket, SocketAddr, Ipv4Addr, IpAddr};
 use std;
 use std::cell::Cell;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 
+use crate::options;
 use crate::options::{DhcpOption, MessageType};
 use crate::packet::*;
-use crate::options;
 
 ///! This is a convenience module that simplifies the writing of a DHCP server service.
 
@@ -24,7 +24,11 @@ pub trait Handler {
 /// This function is called by Reply.
 pub fn filter_options_by_req(opts: &mut Vec<DhcpOption>, req_params: &[u8]) {
     let mut pos = 0;
-    let h = &[options::DHCP_MESSAGE_TYPE as u8, options::SERVER_IDENTIFIER as u8, options::IP_ADDRESS_LEASE_TIME as u8] as &[u8];
+    let h = &[
+        options::DHCP_MESSAGE_TYPE as u8,
+        options::SERVER_IDENTIFIER as u8,
+        options::IP_ADDRESS_LEASE_TIME as u8,
+    ] as &[u8];
     for z in [h, req_params].iter() {
         for r in z.iter() {
             let mut found = false;
@@ -46,10 +50,11 @@ pub fn filter_options_by_req(opts: &mut Vec<DhcpOption>, req_params: &[u8]) {
 }
 
 impl Server {
-    pub fn serve<H: Handler>(udp_soc: UdpSocket,
-                             server_ip: Ipv4Addr,
-                             mut handler: H)
-                             -> std::io::Error {
+    pub fn serve<H: Handler>(
+        udp_soc: UdpSocket,
+        server_ip: Ipv4Addr,
+        mut handler: H,
+    ) -> std::io::Error {
         let mut in_buf: [u8; 1500] = [0; 1500];
         let mut s = Server {
             out_buf: Cell::new([0; 1500]),
@@ -73,13 +78,13 @@ impl Server {
     /// Constructs and sends a reply packet back to the client.
     /// additional_options should not include DHCP_MESSAGE_TYPE nor SERVER_IDENTIFIER as these
     /// are added automatically.
-    pub fn reply(&self,
-                 msg_type: MessageType,
-                 additional_options: Vec<DhcpOption>,
-                 offer_ip: Ipv4Addr,
-                 req_packet: Packet)
-                 -> std::io::Result<usize> {
-
+    pub fn reply(
+        &self,
+        msg_type: MessageType,
+        additional_options: Vec<DhcpOption>,
+        offer_ip: Ipv4Addr,
+        req_packet: Packet,
+    ) -> std::io::Result<usize> {
         let ciaddr = match msg_type {
             MessageType::Nak => Ipv4Addr::new(0, 0, 0, 0),
             _ => req_packet.ciaddr,
@@ -100,7 +105,9 @@ impl Server {
         });*/
         opts.extend(additional_options);
 
-        if let Some(DhcpOption::ParameterRequestList(prl)) = req_packet.option(options::PARAMETER_REQUEST_LIST) {
+        if let Some(DhcpOption::ParameterRequestList(prl)) =
+            req_packet.option(options::PARAMETER_REQUEST_LIST)
+        {
             filter_options_by_req(&mut opts, &prl);
         }
 

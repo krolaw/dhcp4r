@@ -1,12 +1,12 @@
 use crate::options::*;
 
-use std::net::Ipv4Addr;
 use nom::bytes::complete::{tag, take};
-use nom::number::complete::{be_u16, be_u32, be_u8};
 use nom::multi::{many0, many_till};
+use nom::number::complete::{be_u16, be_u32, be_u8};
+use std::net::Ipv4Addr;
 
 pub enum Err<I> {
-    NomError(nom::Err<(I,nom::error::ErrorKind)>),
+    NomError(nom::Err<(I, nom::error::ErrorKind)>),
     NonUtf8String,
     UnrecognizedMessageType,
     InvalidHlen,
@@ -41,14 +41,17 @@ pub struct Packet {
 
 fn decode_reply(input: &[u8]) -> IResult<&[u8], bool> {
     let (input, reply) = take(1u8)(input)?;
-    Ok((input, match reply[0] {
-        BOOT_REPLY => true,
-        BOOT_REQUEST => false,
-        _ => {
-            // @TODO: Throw an error
-            false
-        }
-    }))
+    Ok((
+        input,
+        match reply[0] {
+            BOOT_REPLY => true,
+            BOOT_REQUEST => false,
+            _ => {
+                // @TODO: Throw an error
+                false
+            }
+        },
+    ))
 }
 
 fn decode_ipv4(p: &[u8]) -> IResult<&[u8], Ipv4Addr> {
@@ -63,46 +66,28 @@ pub fn decode_option(input: &[u8]) -> IResult<&[u8], DhcpOption> {
     let (input, len) = be_u8(input)?;
     let (input, data) = take(len)(input)?;
     let option = match code {
-        DHCP_MESSAGE_TYPE => DhcpOption::DhcpMessageType(
-            match MessageType::from(be_u8(data)?.1) {
-                Ok(x) => x,
-                Err(_) => return Err(nom::Err::Error(Err::UnrecognizedMessageType)),
-            }
-        ),
-        SERVER_IDENTIFIER => DhcpOption::ServerIdentifier(
-            decode_ipv4(data)?.1
-        ),
-        PARAMETER_REQUEST_LIST => DhcpOption::ParameterRequestList(
-            data.to_vec()
-        ),
-        REQUESTED_IP_ADDRESS => DhcpOption::RequestedIpAddress(
-            decode_ipv4(data)?.1
-        ),
-        HOST_NAME => DhcpOption::HostName(
-            match std::str::from_utf8(data) {
-                Ok(s) => s.to_string(),
-                Err(_) => return Err(nom::Err::Error(Err::NonUtf8String)),
-            }
-        ),
-        ROUTER => DhcpOption::Router(
-            many0(decode_ipv4)(data)?.1
-        ),
-        DOMAIN_NAME_SERVER => DhcpOption::DomainNameServer(
-            many0(decode_ipv4)(data)?.1
-        ),
-        IP_ADDRESS_LEASE_TIME => DhcpOption::IpAddressLeaseTime(
-            be_u32(data)?.1
-        ),
-        MESSAGE => DhcpOption::Message(
-            match std::str::from_utf8(data) {
-                Ok(s) => s.to_string(),
-                Err(_) => return Err(nom::Err::Error(Err::NonUtf8String)),
-            }
-        ),
-        _ => DhcpOption::Unrecognized(RawDhcpOption{
+        DHCP_MESSAGE_TYPE => DhcpOption::DhcpMessageType(match MessageType::from(be_u8(data)?.1) {
+            Ok(x) => x,
+            Err(_) => return Err(nom::Err::Error(Err::UnrecognizedMessageType)),
+        }),
+        SERVER_IDENTIFIER => DhcpOption::ServerIdentifier(decode_ipv4(data)?.1),
+        PARAMETER_REQUEST_LIST => DhcpOption::ParameterRequestList(data.to_vec()),
+        REQUESTED_IP_ADDRESS => DhcpOption::RequestedIpAddress(decode_ipv4(data)?.1),
+        HOST_NAME => DhcpOption::HostName(match std::str::from_utf8(data) {
+            Ok(s) => s.to_string(),
+            Err(_) => return Err(nom::Err::Error(Err::NonUtf8String)),
+        }),
+        ROUTER => DhcpOption::Router(many0(decode_ipv4)(data)?.1),
+        DOMAIN_NAME_SERVER => DhcpOption::DomainNameServer(many0(decode_ipv4)(data)?.1),
+        IP_ADDRESS_LEASE_TIME => DhcpOption::IpAddressLeaseTime(be_u32(data)?.1),
+        MESSAGE => DhcpOption::Message(match std::str::from_utf8(data) {
+            Ok(s) => s.to_string(),
+            Err(_) => return Err(nom::Err::Error(Err::NonUtf8String)),
+        }),
+        _ => DhcpOption::Unrecognized(RawDhcpOption {
             code: code,
             data: data.to_vec(),
-        })
+        }),
     };
     Ok((input, option))
 }
@@ -133,19 +118,24 @@ fn decode(input: &[u8]) -> IResult<&[u8], Packet> {
 
     let (input, (options, _)) = many_till(decode_option, tag(&[END]))(input)?;
 
-    Ok((input, Packet{
-        reply: reply,
-        hops: hops,
-        secs: secs,
-        broadcast: flags & 128 == 128,
-        ciaddr: ciaddr,
-        yiaddr: yiaddr,
-        siaddr: siaddr,
-        giaddr: giaddr,
-        options: options,
-        chaddr: [chaddr[0], chaddr[1], chaddr[2], chaddr[3], chaddr[4], chaddr[5]],
-        xid: xid,
-    }))
+    Ok((
+        input,
+        Packet {
+            reply: reply,
+            hops: hops,
+            secs: secs,
+            broadcast: flags & 128 == 128,
+            ciaddr: ciaddr,
+            yiaddr: yiaddr,
+            siaddr: siaddr,
+            giaddr: giaddr,
+            options: options,
+            chaddr: [
+                chaddr[0], chaddr[1], chaddr[2], chaddr[3], chaddr[4], chaddr[5],
+            ],
+            xid: xid,
+        },
+    ))
 }
 
 impl Packet {
@@ -174,26 +164,20 @@ impl Packet {
 
     /// Creates byte array DHCP packet
     pub fn encode<'c>(&'c self, p: &'c mut [u8]) -> &[u8] {
-        p[..12].clone_from_slice(&[(if self.reply {
-                                       BOOT_REPLY
-                                   } else {
-                                       BOOT_REQUEST
-                                   }),
-                                   1,
-                                   6,
-                                   self.hops,
-                                   ((self.xid >> 24) & 0xFF) as u8,
-                                   ((self.xid >> 16) & 0xFF) as u8,
-                                   ((self.xid >> 8) & 0xFF) as u8,
-                                   (self.xid & 0xFF) as u8,
-                                   (self.secs >> 8) as u8,
-                                   (self.secs & 255) as u8,
-                                   (if self.broadcast {
-                                       128
-                                   } else {
-                                       0
-                                   }),
-                                   0]);
+        p[..12].clone_from_slice(&[
+            (if self.reply { BOOT_REPLY } else { BOOT_REQUEST }),
+            1,
+            6,
+            self.hops,
+            ((self.xid >> 24) & 0xFF) as u8,
+            ((self.xid >> 16) & 0xFF) as u8,
+            ((self.xid >> 8) & 0xFF) as u8,
+            (self.xid & 0xFF) as u8,
+            (self.secs >> 8) as u8,
+            (self.secs & 255) as u8,
+            (if self.broadcast { 128 } else { 0 }),
+            0,
+        ]);
         p[12..16].clone_from_slice(&self.ciaddr.octets());
         p[16..20].clone_from_slice(&self.yiaddr.octets());
         p[20..24].clone_from_slice(&self.siaddr.octets());

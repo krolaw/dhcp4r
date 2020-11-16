@@ -10,7 +10,12 @@ pub mod server;
 #[macro_export]
 macro_rules! u32_bytes {
     ( $x:expr ) => {
-        [($x >> 24) as u8, ($x >> 16) as u8, ($x >> 8) as u8, $x as u8]
+        [
+            ($x >> 24) as u8,
+            ($x >> 16) as u8,
+            ($x >> 8) as u8,
+            $x as u8,
+        ]
     };
 }
 
@@ -18,7 +23,10 @@ macro_rules! u32_bytes {
 #[macro_export]
 macro_rules! bytes_u32 {
     ( $x:expr ) => {
-        ($x[0] as u32) * (1 << 24) + ($x[1] as u32) * (1 << 16) + ($x[2] as u32) * (1 << 8) + ($x[3] as u32)
+        ($x[0] as u32) * (1 << 24)
+            + ($x[1] as u32) * (1 << 16)
+            + ($x[2] as u32) * (1 << 8)
+            + ($x[3] as u32)
     };
 }
 
