@@ -20,7 +20,7 @@ impl server::Handler for MyServer {
                     },
                     _ => in_packet.ciaddr,
                 };
-                println!("{}\t{}\t{}\tOnline", time::now().strftime("%Y-%m-%dT%H:%M:%S").unwrap(),
+                println!("{}\t{}\t{}\tOnline", time::OffsetDateTime::now_local().format("%Y-%m-%dT%H:%M:%S"),
                  chaddr(&in_packet.chaddr), Ipv4Addr::from(req_ip));
             }
             _ => {}
