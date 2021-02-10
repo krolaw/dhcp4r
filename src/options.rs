@@ -67,13 +67,7 @@ impl DhcpOption {
             },
             Self::IpAddressLeaseTime(secs) => RawDhcpOption {
                 code: IP_ADDRESS_LEASE_TIME,
-                data: [
-                    (secs & 0xFF) as u8,
-                    ((secs >> 8) & 0xFFu32) as u8,
-                    ((secs >> 16) & 0xFFu32) as u8,
-                    ((secs >> 24) & 0xFFu32) as u8,
-                ]
-                .to_vec(),
+                data: secs.to_be_bytes().to_vec(),
             },
             Self::SubnetMask(mask) => RawDhcpOption {
                 code: SUBNET_MASK,
