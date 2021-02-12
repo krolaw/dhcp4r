@@ -1,0 +1,15 @@
+
+Trigger the build by
+
+  cargo build
+
+
+To get the examples build, type
+
+  cargo build --examples
+
+
+
+Background information:
+With `rust` there is no `./configure` and `make`.
+The buid tool for rust is `cargo`.
