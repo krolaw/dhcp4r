@@ -1,6 +1,6 @@
 [package]
 name = "dhcp4r"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Richard Warburton <richard@warburton.it>"]
 description = "IPv4 DHCP library with working server example."
 edition = "2018"
