@@ -128,7 +128,9 @@ impl Server {
     /// Checks the packet see if it was intended for this DHCP server (as opposed to some other also on the network).
     pub fn for_this_server(&self, packet: &Packet) -> bool {
         match packet.option(options::SERVER_IDENTIFIER) {
-            Some(DhcpOption::ServerIdentifier(x)) => (x == &self.server_ip),
+            Some(DhcpOption::ServerIdentifier(x)) => {
+                x == &self.server_ip
+            },
             _ => false,
         }
     }

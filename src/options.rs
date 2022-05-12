@@ -1,13 +1,13 @@
 use num_traits::FromPrimitive;
 use std::net::Ipv4Addr;
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct RawDhcpOption {
     pub code: u8,
     pub data: Vec<u8>,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum DhcpOption {
     DhcpMessageType(MessageType),
     ServerIdentifier(Ipv4Addr),
@@ -318,7 +318,7 @@ pub fn title(code: u8) -> Option<&'static str> {
 /// > This option is used to convey the type of the DHCP message.  The code for this option is 53,
 /// > and its length is 1.
 ///
-#[derive(Primitive, Copy, Clone, PartialEq)]
+#[derive(Primitive, Copy, Clone, PartialEq, Debug)]
 pub enum MessageType {
     /// Client broadcast to locate available servers.
     Discover = 1,

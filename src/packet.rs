@@ -80,6 +80,7 @@ pub fn decode_option(input: &[u8]) -> IResult<&[u8], DhcpOption> {
         ROUTER => DhcpOption::Router(many0(decode_ipv4)(data)?.1),
         DOMAIN_NAME_SERVER => DhcpOption::DomainNameServer(many0(decode_ipv4)(data)?.1),
         IP_ADDRESS_LEASE_TIME => DhcpOption::IpAddressLeaseTime(be_u32(data)?.1),
+        SUBNET_MASK => DhcpOption::SubnetMask(decode_ipv4(data)?.1),
         MESSAGE => DhcpOption::Message(match std::str::from_utf8(data) {
             Ok(s) => s.to_string(),
             Err(_) => return Err(nom::Err::Error(Err::NonUtf8String)),
