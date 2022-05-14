@@ -25,6 +25,7 @@ impl<I> nom::error::ParseError<I> for Err<I> {
 type IResult<I, O> = nom::IResult<I, O, Err<I>>;
 
 /// DHCP Packet Structure
+#[derive(Debug)]
 pub struct Packet {
     pub reply: bool, // false = request, true = reply
     pub hops: u8,
