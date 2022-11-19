@@ -12,6 +12,7 @@ pub struct Server {
     socket: UdpSocket,
     src: SocketAddr,
     server_ip: Ipv4Addr,
+    broadcast_ip: Ipv4Addr,
 }
 
 pub trait Handler {
@@ -52,6 +53,15 @@ impl Server {
     pub fn serve<H: Handler>(
         udp_soc: UdpSocket,
         server_ip: Ipv4Addr,
+        handler: H,
+    ) -> std::io::Error {
+        Self::serve_in_subnet(udp_soc, server_ip, Ipv4Addr::UNSPECIFIED, handler)
+    }
+
+    pub fn serve_in_subnet<H: Handler>(
+        udp_soc: UdpSocket,
+        server_ip: Ipv4Addr,
+        subnet_mask: Ipv4Addr,
         mut handler: H,
     ) -> std::io::Error {
         let mut in_buf: [u8; 1500] = [0; 1500];
@@ -59,7 +69,10 @@ impl Server {
             out_buf: Cell::new([0; 1500]),
             socket: udp_soc,
             server_ip,
-            src: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
+            broadcast_ip: ((u32::from(server_ip) & u32::from(subnet_mask))
+                | (u32::from(Ipv4Addr::BROADCAST) & !(u32::from(subnet_mask))))
+            .into(),
+            src: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
         };
         loop {
             match s.socket.recv_from(&mut in_buf) {
@@ -128,9 +141,7 @@ impl Server {
     /// Checks the packet see if it was intended for this DHCP server (as opposed to some other also on the network).
     pub fn for_this_server(&self, packet: &Packet) -> bool {
         match packet.option(options::SERVER_IDENTIFIER) {
-            Some(DhcpOption::ServerIdentifier(x)) => {
-                x == &self.server_ip
-            },
+            Some(DhcpOption::ServerIdentifier(x)) => x == &self.server_ip,
             _ => false,
         }
     }
@@ -138,8 +149,8 @@ impl Server {
     /// Encodes and sends a DHCP packet back to the client.
     pub fn send(&self, p: Packet) -> std::io::Result<usize> {
         let mut addr = self.src;
-        if p.broadcast || addr.ip() == IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)) {
-            addr.set_ip(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)));
+        if p.broadcast || addr.ip().is_unspecified() {
+            addr.set_ip(IpAddr::V4(self.broadcast_ip));
         }
         self.socket.send_to(p.encode(&mut self.out_buf.get()), addr)
     }
